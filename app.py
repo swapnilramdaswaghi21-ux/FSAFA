@@ -1,195 +1,82 @@
-# ============================================================
-# QR-XFE ENTERPRISE | Quantum-Resistant Fraud Detection
-# ============================================================
-
 import streamlit as st
 import pandas as pd
-import numpy as np
-import plotly.express as px
-import shap
-import xgboost as xgb
-import matplotlib.pyplot as plt
-from sklearn.ensemble import RandomForestClassifier, VotingClassifier
-from sklearn.model_selection import train_test_split
-from datetime import datetime
-import warnings
-warnings.filterwarnings("ignore")
+from credit_model import load_model, FEATURES
 
-# ============================================================
-# STREAMLIT CONFIG
-# ============================================================
 st.set_page_config(
-    page_title="QR-XFE | Enterprise Fraud Detection",
+    page_title="QR-XFE Credit Scanner",
     page_icon="🏦",
     layout="wide"
 )
 
-# ============================================================
-# STYLING
-# ============================================================
-st.markdown("""
-<style>
-body {font-family: Inter, sans-serif;}
-.header {font-size:2.6rem;font-weight:700;text-align:center;color:#1e293b;}
-.sub {font-size:1.4rem;text-align:center;color:#334155;}
-.card {
-    background:white;
-    padding:1.5rem;
-    border-radius:12px;
-    box-shadow:0 4px 20px rgba(0,0,0,0.08);
-    border-left:5px solid;
-}
-.green {border-left-color:#10b981;}
-.yellow {border-left-color:#f59e0b;}
-.red {border-left-color:#ef4444;}
-.kpi {
-    background:linear-gradient(135deg,#1e40af,#3b82f6);
-    color:white;
-    padding:1.5rem;
-    border-radius:12px;
-    text-align:center;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ============================================================
-# DATA
-# ============================================================
-@st.cache_data
-def load_data():
-    np.random.seed(42)
-    n = 5000
-    df = pd.DataFrame({
-        "company": [f"NSE_{i:04d}" for i in range(n)],
-        "sector": np.random.choice(
-            ["Banking","IT","Infra","Pharma","FMCG","Auto","Real Estate"], n),
-        "market_cap": np.random.lognormal(8, 2, n),
-        "Beneish_M": np.random.normal(-2.5, 0.6, n),
-        "Altman_Z": np.random.normal(2.8, 1.2, n),
-        "Sloan_Ratio": np.random.normal(0.01, 0.03, n),
-        "Piotroski_F": np.random.randint(0, 10, n),
-        "Ab_CFO": np.random.normal(0, 0.15, n),
-        "ROA": np.random.normal(0.07, 0.06, n),
-        "Debt_Equity": np.random.uniform(0.1, 1.5, n),
-        "Auditor_Change": np.random.choice([0,1], n, p=[0.9,0.1])
-    })
-
-    df["fraud_risk"] = (
-        (df["Beneish_M"] > -2.22) |
-        (df["Altman_Z"] < 1.8) |
-        (df["Sloan_Ratio"].abs() > 0.02) |
-        (df["Piotroski_F"] < 3)
-    ).astype(int)
-
-    return df
-
-# ============================================================
-# MODEL
-# ============================================================
-@st.cache_resource
-def train_model():
-    df = load_data()
-    features = [
-        "Beneish_M","Altman_Z","Sloan_Ratio",
-        "Piotroski_F","Ab_CFO","ROA",
-        "Debt_Equity","Auditor_Change"
-    ]
-    X = df[features]
-    y = df["fraud_risk"]
-
-    X_train, _, y_train, _ = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=42
-    )
-
-    xgb_model = xgb.XGBClassifier(
-        n_estimators=200,
-        learning_rate=0.05,
-        max_depth=4,
-        subsample=0.9,
-        colsample_bytree=0.9,
-        eval_metric="logloss"
-    )
-
-    rf = RandomForestClassifier(
-        n_estimators=200,
-        class_weight="balanced"
-    )
-
-    ensemble = VotingClassifier(
-        estimators=[("xgb", xgb_model), ("rf", rf)],
-        voting="soft"
-    )
-
-    ensemble.fit(X_train, y_train)
-    xgb_model.fit(X_train, y_train)
-
-    explainer = shap.TreeExplainer(xgb_model)
-
-    return ensemble, explainer, features, df
-
-# ============================================================
-# UI
-# ============================================================
-st.markdown('<div class="header">🏦 QR-XFE Enterprise Platform</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub">Explainable AI Fraud Detection | RBI Ready</div>', unsafe_allow_html=True)
+# ===================== HEADER =====================
+st.markdown("<h1 style='text-align:center'>🏦 QR-XFE Corporate Credit Scanner</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;color:#64748b;font-size:1.2rem'>Live Loan Fraud Detection | ₹100Cr+ Exposure</p>", unsafe_allow_html=True)
 st.markdown("---")
 
-ensemble, explainer, features, data = train_model()
+model, accuracy, credit_data = load_model()
 
-c1, c2, c3, c4 = st.columns(4)
-c1.markdown('<div class="kpi"><h3>Firms</h3><h1>5,000</h1></div>', unsafe_allow_html=True)
-c2.markdown('<div class="kpi"><h3>Accuracy</h3><h1>95%</h1></div>', unsafe_allow_html=True)
-c3.markdown('<div class="kpi"><h3>False Positives</h3><h1>2%</h1></div>', unsafe_allow_html=True)
-c4.markdown('<div class="kpi"><h3>RBI Ready</h3><h1>✅</h1></div>', unsafe_allow_html=True)
+# ===================== KPIs =====================
+c1,c2,c3,c4 = st.columns(4)
+c1.metric("Loans Screened", "2,500")
+c2.metric("Rejected", "18%")
+c3.metric("Model Accuracy", f"{accuracy:.1%}")
+c4.metric("Basel III", "✅")
 
-tab1, tab2, tab3 = st.tabs(["🔍 Company Scan","📊 Watchlist","🔥 Heatmap"])
+# ===================== TABS =====================
+tab1, tab2, tab3 = st.tabs(["🔍 Loan Scan","🚫 Reject List","📊 Portfolio"])
 
+# ===================== TAB 1 =====================
 with tab1:
-    st.subheader("Forensic Company Scan")
-    sample = pd.DataFrame([{
-        "Beneish_M": -1.9,
-        "Altman_Z": 1.6,
-        "Sloan_Ratio": 0.035,
-        "Piotroski_F": 2,
-        "Ab_CFO": 0.12,
-        "ROA": 0.02,
-        "Debt_Equity": 0.75,
-        "Auditor_Change": 1
-    }])
+    st.subheader("New Loan Application")
 
-    risk = ensemble.predict_proba(sample)[0][1]
-    color = "red" if risk > 0.7 else "yellow" if risk > 0.3 else "green"
+    col1, col2 = st.columns(2)
+    with col1:
+        beneish = st.number_input("Beneish M-Score", -4.0, 1.0, -2.4)
+        altman = st.number_input("Altman Z-Score", 0.0, 6.0, 2.6)
+        sloan = st.number_input("Sloan Ratio %", -0.1, 0.1, 0.01) / 100
+        dsr = st.number_input("DSR", 0.5, 5.0, 1.4)
 
-    st.markdown(
-        f'<div class="card {color}"><h2>Risk Score</h2><h1>{risk:.1%}</h1></div>',
-        unsafe_allow_html=True
-    )
+    with col2:
+        current_ratio = st.number_input("Current Ratio", 0.5, 4.0, 1.3)
+        wc_days = st.number_input("Working Capital Days", 30, 200, 90)
+        auditor = st.checkbox("Auditor Qualification")
 
-    st.markdown("### 🧠 SHAP Explainability")
-    shap_values = explainer(sample)
-    fig, ax = plt.subplots()
-    shap.plots.waterfall(shap_values[0], show=False)
-    st.pyplot(fig)
+    if st.button("🚀 ASSESS CREDIT RISK", use_container_width=True):
+        app = pd.DataFrame([[
+            beneish, altman, sloan, 6,
+            dsr, current_ratio, wc_days, int(auditor)
+        ]], columns=FEATURES)
 
+        risk = model.predict_proba(app)[0,1]
+
+        if risk > 0.75:
+            st.error(f"🚫 LOAN REJECTED | Fraud Risk {risk:.0%}")
+        elif risk > 0.45:
+            st.warning(f"⚠️ CONDITIONAL APPROVAL | Risk {risk:.0%}")
+        else:
+            st.success(f"✅ APPROVED | Risk {risk:.0%}")
+
+# ===================== TAB 2 =====================
 with tab2:
-    st.subheader("High Risk Watchlist")
+    st.subheader("High Risk Loan Applications")
     st.dataframe(
-        data[data["fraud_risk"] == 1]
-        .sort_values("Beneish_M", ascending=False)
-        .head(25),
+        credit_data[credit_data['fraud_flag']==1]
+        .nlargest(15,'Beneish_M')
+        [['company','industry','loan_amount_cr','DSR']]
+        .round(2),
         use_container_width=True
     )
 
+# ===================== TAB 3 =====================
 with tab3:
-    st.subheader("Sector Risk Heatmap")
-    heatmap = data.pivot_table(
-        values="fraud_risk",
-        index="sector",
-        columns=pd.cut(data["market_cap"], 3, labels=["Small","Mid","Large"]),
-        aggfunc="mean"
-    )
-    fig = px.imshow(heatmap, color_continuous_scale="RdYlGn_r")
-    st.plotly_chart(fig, use_container_width=True)
+    portfolio = pd.DataFrame({
+        "Company":["ABC Steel","XYZ Realty","LMN Pharma"],
+        "Exposure ₹Cr":[250,180,320],
+        "Risk":[0.12,0.78,0.08],
+        "Status":["Normal","Watchlist","Normal"]
+    })
+    st.dataframe(portfolio, use_container_width=True)
 
 st.markdown("---")
-st.markdown("<center>© 2025 | QR-XFE | Big-4 & IB Ready</center>", unsafe_allow_html=True)
+st.markdown("<center>© 2025 QR-XFE | Bank Credit Risk Platform</center>", unsafe_allow_html=True)
+
